@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USAF Dorm Quality of Life Maintenance Portal</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b132b; margin: 0; padding: 12px; color: #ffffff; }
+    .container { max-width: 440px; margin: 0 auto; background: #1c2541; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-top: 6px solid #48cae4; }
+    h2 { margin-top: 0; color: #48cae4; font-size: 1.3rem; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+    .banner { background: #5c4d00; border-left: 4px solid #ffb703; padding: 10px; font-size: 0.8rem; margin-bottom: 16px; border-radius: 4px; line-height: 1.4; }
+    label { display: block; font-weight: 600; margin-top: 14px; font-size: 0.85rem; color: #cbd5e1; }
+    input, select, textarea { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #3a506b; border-radius: 6px; box-sizing: border-box; font-size: 1rem; background: #0b132b; color: #fff; }
+    input:focus, select:focus, textarea:focus { border-color: #48cae4; outline: none; }
+    button { width: 100%; background: #48cae4; color: #0b132b; border: none; padding: 15px; font-size: 1.1rem; font-weight: bold; border-radius: 6px; margin-top: 22px; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #00b4d8; }
+    button:disabled { background: #555; color: #888; }
+    .error { color: #ff4d4d; font-size: 0.8rem; margin-top: 6px; display: none; }
+    .file-preview { display: none; margin-top: 10px; text-align: center; }
+    .file-preview img { max-width: 100%; max-height: 150px; border-radius: 6px; border: 1px solid #48cae4; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Dorm Maintenance Request</h2>
+    <div class="banner">
+      <strong>⚠️ UNCLASSIFIED/CUI SYSTEM:</strong> Do NOT submit Personally Identifiable Information (PII) like SSNs, protected health data (PHI), or classified information.
+    </div>
+
+    <form id="dormForm">
+      <label for="buildingNumber">Building Number *</label>
+      <select id="buildingNumber" required>
+        <option value="">-- Select Building --</option>
+        <option value="1204">Bldg 1204</option>
+        <option value="1206">Bldg 1206</option>
+        <option value="1208">Bldg 1208</option>
+      </select>
+
+      <label for="roomNumber">Room Number *</label>
+      <input type="text" id="roomNumber" pattern="^[1-4][0-9]{2}[A-Za-z]?$" placeholder="e.g., 204B" required>
+
+      <label for="category">Issue Category *</label>
+      <select id="category" required>
+        <option value="">-- Select Category --</option>
+        <option value="HVAC / AC / Heat">HVAC / AC / Heat</option>
+        <option value="Mold / Moisture">Mold / Moisture (Photo Required)</option>
+        <option value="Plumbing / Water Leak">Plumbing / Water Leak</option>
+        <option value="Electrical">Electrical</option>
+        <option value="Appliance">Appliance</option>
+        <option value="Lock / Key">Lock / Key</option>
+        <option value="Pest Control">Pest Control</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <label for="urgency">Urgency Level *</label>
+      <select id="urgency" required>
+        <option value="Routine">Routine (Standard Work Order)</option>
+        <option value="Urgent">Urgent (Impacts Livability)</option>
+        <option value="Emergency">Emergency (Flood / Mold / Outage)</option>
+      </select>
+
+      <label for="description">Description (Min 15 chars) *</label>
+      <textarea id="description" rows="3" minlength="15" maxlength="500" placeholder="Provide details like 'Standing water under the sink' or 'AC blowing warm air.'" required></textarea>
+
+      <label for="photo">Photo Evidence (.jpg / .png only - Max 5MB) *</label>
+      <input type="file" id="photo" accept="image/jpeg, image/png" capture="environment">
+      <div id="fileError" class="error">Invalid attachment. Make sure it's a JPG/PNG under 5MB.</div>
+      <div class="file-preview" id="previewContainer">
+        <img id="imagePreview" src="" alt="Thumbnail preview">
+      </div>
+
+      <label for="submitterEmail">Your Email *</label>
+      <input type="email" id="submitterEmail" placeholder="personal or .mil email" required>
+
+      <label style="display:flex; align-items:center; font-weight:normal; margin-top:16px; cursor:pointer;">
+        <input type="checkbox" id="entryAuthorized" style="width:auto; margin-right:10px;" required>
+        I authorize CE/ADL personnel to enter my room if I am absent.
+      </label>
+
+      <button type="submit" id="submitBtn">Submit Secure Request</button>
+    </form>
+  </div>
+
+  <script>
+    // 1. URL Query Parameter Handling
+    const urlParams = new URLSearchParams(window.location.search);
+    const bldgParam = urlParams.get('bldg');
+    if (bldgParam) {
+      document.getElementById('buildingNumber').value = bldgParam;
+    }
+
+    // 2. Adjust requirements and show preview
+    const categoryEl = document.getElementById('category');
+    const photoEl = document.getElementById('photo');
+    const previewContainer = document.getElementById('previewContainer');
+    const imagePreview = document.getElementById('imagePreview');
+
+    categoryEl.addEventListener('change', () => {
+      photoEl.required = (categoryEl.value === 'Mold / Moisture');
+    });
+
+    photoEl.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          imagePreview.src = e.target.result;
+          previewContainer.style.display = 'block';
+        }
+        reader.readAsDataURL(file);
+      } else {
+        previewContainer.style.display = 'none';
+      }
+    });
+
+    // Helper: Convert File to Base64
+    const toBase64 = file => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = error => reject(error);
+    });
+
+    // Client-Side Input Sanitization (XSS and SQL neutralization)
+    function sanitizeInput(rawInput) {
+      if (!rawInput) return "";
+      let clean = rawInput.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML tags
+      const 
