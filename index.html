@@ -15,10 +15,8 @@
     input:focus, select:focus, textarea:focus { border-color: #48cae4; outline: none; }
     button { width: 100%; background: #48cae4; color: #0b132b; border: none; padding: 15px; font-size: 1.1rem; font-weight: bold; border-radius: 6px; margin-top: 22px; cursor: pointer; transition: background 0.2s; }
     button:hover { background: #00b4d8; }
-    button:disabled { background: #555; color: #888; }
-    .error { color: #ff4d4d; font-size: 0.8rem; margin-top: 6px; display: none; }
-    .file-preview { display: none; margin-top: 10px; text-align: center; }
-    .file-preview img { max-width: 100%; max-height: 150px; border-radius: 6px; border: 1px solid #48cae4; }
+    button:disabled { background: #555; color: #888; cursor: not-allowed; }
+    .info-box { background: #0b132b; border: 1px solid #3a506b; padding: 12px; border-radius: 6px; font-size: 0.85rem; color: #cbd5e1; margin-top: 16px; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -28,52 +26,38 @@
       <strong>⚠️ UNCLASSIFIED/CUI SYSTEM:</strong> Do NOT submit Personally Identifiable Information (PII) like SSNs, protected health data (PHI), or classified information.
     </div>
     <div class="token-badge" id="tokenDisplay">Verifying Base Installation Token...</div>
+
     <form id="dormForm">
-      <label for="buildingNumber">Building Number *</label>
+      <label for="buildingNumber">Select Your Dorm Building *</label>
       <select id="buildingNumber" required>
         <option value="">-- Loading Buildings --</option>
       </select>
-      <label for="roomNumber">Room Number *</label>
-      <input type="text" id="roomNumber" pattern="^[1-4][0-9]{2}[A-Za-z]?$" placeholder="e.g., 204B or 100" required>
-      <label for="category">Issue Category *</label>
-      <select id="category" required>
-        <option value="">-- Select Category --</option>
-        <option value="HVAC / AC / Heat">HVAC / AC / Heat</option>
-        <option value="Mold / Moisture">Mold / Moisture (Photo Required)</option>
-        <option value="Plumbing / Water Leak">Plumbing / Water Leak</option>
-        <option value="Electrical">Electrical</option>
-        <option value="Appliance">Appliance</option>
-        <option value="Lock / Key">Lock / Key</option>
-        <option value="Pest Control">Pest Control</option>
-        <option value="Other">Other</option>
-      </select>
-      <label for="urgency">Urgency Level *</label>
-      <select id="urgency" required>
-        <option value="Routine">Routine (Standard Work Order)</option>
-        <option value="Urgent">Urgent (Impacts Livability)</option>
-        <option value="Emergency">Emergency (Flood / Mold / Outage)</option>
-      </select>
-      <label for="description">Description (Min 15 chars) *</label>
-      <textarea id="description" rows="3" minlength="15" maxlength="500" placeholder="Provide details like 'Standing water under the sink' or 'AC blowing warm air.'" required></textarea>
-      <label for="photo">Photo Evidence (.jpg / .png only - Max 5MB)</label>
-      <input type="file" id="photo" accept="image/jpeg, image/png" capture="environment">
-      <div id="fileError" class="error">Invalid attachment. Make sure it's a JPG/PNG under 5MB.</div>
-      <div class="file-preview" id="previewContainer">
-        <img id="imagePreview" src="" alt="Thumbnail preview">
+
+      <div class="info-box" id="handoffNotice">
+        Select your building above to launch the official USAF Dorm Maintenance intake form.
       </div>
-      <label for="submitterEmail">Your Email *</label>
-      <input type="email" id="submitterEmail" placeholder="personal or .mil email" required>
-      <label style="display:flex; align-items:center; font-weight:normal; margin-top:16px; cursor:pointer;">
-        <input type="checkbox" id="entryAuthorized" style="width:auto; margin-right:10px;" required>
-        I authorize CE/ADL personnel to enter my room if I am absent.
-      </label>
-      <button type="submit" id="submitBtn">Submit Secure Request</button>
+
+      <button type="submit" id="submitBtn">Continue to Maintenance Form</button>
     </form>
   </div>
+
   <script>
+    // =========================================================================
+    // CONFIGURATION: Paste your NIPR MS Forms "Anyone can respond" URL below.
+    // Leave blank ("") while testing QR tokens & buildings.json off-NIPR.
+    // =========================================================================
+    const MS_FORM_URL = ""; 
+
+    // Optional: If using MS Forms "Get Pre-filled URL", paste the field IDs here
+    // (e.g., "r1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6") to auto-fill Building & Token.
+    const PREFILL_BLDG_PARAM = ""; 
+    const PREFILL_TOKEN_PARAM = "";
+    // =========================================================================
+
     const bldgSelect = document.getElementById('buildingNumber');
     const tokenDisplay = document.getElementById('tokenDisplay');
     const submitBtn = document.getElementById('submitBtn');
+    const handoffNotice = document.getElementById('handoffNotice');
 
     // 1. Read Opaque Base Token from QR URL (?btoken=wpafb-7f9a2)
     const urlParams = new URLSearchParams(window.location.search);
@@ -85,128 +69,67 @@
         const response = await fetch('./buildings.json', { cache: 'no-store' });
         const buildings = await response.json();
         const filteredBuildings = buildings.filter(item => item.btoken === currentBaseToken);
+
         if (filteredBuildings.length === 0) {
           bldgSelect.innerHTML = '<option value="">-- Invalid or Unrecognized Base QR Token --</option>';
           tokenDisplay.textContent = "❌ Unrecognized Base Token (" + currentBaseToken + ")";
           tokenDisplay.style.color = "#ff4d4d";
           submitBtn.disabled = true;
+          handoffNotice.textContent = "This QR code is invalid or expired. Please contact your Airman Dorm Leader (ADL).";
           return;
         }
+
         tokenDisplay.textContent = "🔒 Verified Base Token: " + currentBaseToken;
         bldgSelect.innerHTML = '<option value="">-- Select Building --</option>';
+
         filteredBuildings.forEach(item => {
           const opt = document.createElement('option');
           opt.value = item.bldg;
           opt.textContent = `Bldg ${item.bldg} (${item.squadron})`;
           bldgSelect.appendChild(opt);
         });
+
+        if (!MS_FORM_URL) {
+          handoffNotice.innerHTML = "<strong>🧪 Staging Mode:</strong> MS_FORM_URL is not configured yet. Selecting a building and clicking continue will verify your handoff parameters.";
+        }
       } catch (err) {
         bldgSelect.innerHTML = '<option value="">-- Error Loading Buildings --</option>';
+        submitBtn.disabled = true;
         console.error("Failed to load dynamic building list:", err);
       }
     }
+
     window.onload = loadBuildings;
- 
-    // 3. Photo requirement & thumbnail preview
-    const categoryEl = document.getElementById('category');
-    const photoEl = document.getElementById('photo');
-    const previewContainer = document.getElementById('previewContainer');
-    const imagePreview = document.getElementById('imagePreview');
-    categoryEl.addEventListener('change', () => {
-      photoEl.required = (categoryEl.value === 'Mold / Moisture');
-    });
-    photoEl.addEventListener('change', function() {
-      const file = this.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          imagePreview.src = e.target.result;
-          previewContainer.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-      } else {
-        previewContainer.style.display = 'none';
-      }
-    });
-    const toBase64 = file => new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = error => reject(error);
-    });
 
-    //4. Complete <script>...<\/script> payload eraser + HTML tag stripper
-    function sanitizeInput(rawInput) {
-      if (!rawInput) return "";
-      // Completely erase <script>...<\/script> and everything in between
-      let clean = rawInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      // Strip any remaining HTML tags
-      clean = clean.replace(/<\/?[^>]+(>|$)/g, "");
-      return clean.trim();
-    }
-
-    // 5. Submit Handler
-    document.getElementById('dormForm').addEventListener('submit', async (e) => {
+    // 3. Handoff Handler
+    document.getElementById('dormForm').addEventListener('submit', (e) => {
       e.preventDefault();
-      const fileError = document.getElementById('fileError');
-      fileError.style.display = 'none';
-      let attachmentObj = null;
-      const file = photoEl.files[0];
-      if (file) {
-        const validTypes = ['image/jpeg', 'image/png'];
-        if (!validTypes.includes(file.type) || file.size > 5 * 1024 * 1024) {
-          fileError.style.display = 'block';
-          return;
-        }
-        const b64 = await toBase64(file);
-        attachmentObj = {
-          fileName: file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
-          mimeType: file.type,
-          fileSizeBytes: file.size,
-          base64Content: b64
-        };
+      const selectedBldg = bldgSelect.value;
+      if (!selectedBldg) return;
+
+      // Staging check when MS_FORM_URL hasn't been pasted from NIPR yet
+      if (!MS_FORM_URL) {
+        document.querySelector('.container').innerHTML = `
+          <div style="text-align: center; padding: 16px;">
+            <h2 style="color: #48cae4;">✅ Gate Verified</h2>
+            <p style="font-size: 0.9rem;">Base Token <strong>${currentBaseToken}</strong> and <strong>Bldg ${selectedBldg}</strong> validated.</p>
+            <div class="info-box" style="text-align: left;">
+              <strong>Next Step on NIPR:</strong><br>
+              1. Open your MS Form &rarr; <strong>Collect responses</strong> &rarr; Copy link.<br>
+              2. Paste it into <code>MS_FORM_URL</code> in <code>index.html</code>.
+            </div>
+          </div>`;
+        return;
       }
+
+      // Build final redirect URL (appending pre-fill params if configured)
+      const targetUrl = new URL(MS_FORM_URL);
+      if (PREFILL_BLDG_PARAM) targetUrl.searchParams.set(PREFILL_BLDG_PARAM, selectedBldg);
+      if (PREFILL_TOKEN_PARAM) targetUrl.searchParams.set(PREFILL_TOKEN_PARAM, currentBaseToken);
+
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Securing & Transmitting...';
-      const payload = {
-        buildingNumber: bldgSelect.value,
-        baseToken: currentBaseToken,
-        roomNumber: document.getElementById('roomNumber').value.toUpperCase(),
-        category: categoryEl.value,
-        urgency: document.getElementById('urgency').value,
-        description: sanitizeInput(document.getElementById('description').value),
-        submitterEmail: sanitizeInput(document.getElementById('submitterEmail').value),
-        entryAuthorized: document.getElementById('entryAuthorized').checked,
-        submissionTimestamp: new Date().toISOString(),
-        attachment: attachmentObj
-      };
-      const FLOW_ENDPOINT = "https://prod-xx.usgovtexas.logic.azure.us:443/workflows/YOUR_FLOW_ID/triggers/manual/paths/invoke...";
-      try {
-        const res = await fetch(FLOW_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-USAF-DormQoL-Token': 'DAF-QoL-2026-SecureBridge-Token-ABC123'
-          },
-          body: JSON.stringify(payload)
-       });
-        if (res.ok) {
-          document.querySelector('.container').innerHTML = `
-            <div style="text-align: center; padding: 20px;">
-              <h2 style="color: #48cae4;">✔️ Submission Completed</h2>
-              <p>Your request for <strong>Bldg ${payload.buildingNumber}, Room ${payload.roomNumber}</strong> has been logged securely.</p>
-              <p style="font-size: 0.85rem; color: #cbd5e1;">If you have additional photo evidence, email it to <strong>michael.dickey.4@us.af.mil</strong> with subject: <strong>Bldg ${payload.buildingNumber} Rm ${payload.roomNumber}</strong></p>
-            </div>`;
-        } else {
-          alert('Transmission failed. Check connection or notify your ADL.');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Submit Secure Request';
-        }
-      } catch (err) {
-        alert('Network block detected. Submit via standard cellular connection.');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Secure Request';
-      }
+      submitBtn.textContent = 'Launching Secure Form...';
+      window.location.href = targetUrl.toString();
     });
   </script>
 </body>
