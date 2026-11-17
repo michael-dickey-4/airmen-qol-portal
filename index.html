@@ -9,6 +9,7 @@
     .container { max-width: 440px; margin: 0 auto; background: #1c2541; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); border-top: 6px solid #48cae4; }
     h2 { margin-top: 0; color: #48cae4; font-size: 1.3rem; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
     .banner { background: #5c4d00; border-left: 4px solid #ffb703; padding: 10px; font-size: 0.8rem; margin-bottom: 16px; border-radius: 4px; line-height: 1.4; }
+    .token-badge { background: #0b132b; border: 1px solid #3a506b; padding: 8px 10px; border-radius: 6px; font-size: 0.8rem; color: #94a3b8; text-align: center; margin-bottom: 12px; }
     label { display: block; font-weight: 600; margin-top: 14px; font-size: 0.85rem; color: #cbd5e1; }
     input, select, textarea { width: 100%; padding: 12px; margin-top: 6px; border: 1px solid #3a506b; border-radius: 6px; box-sizing: border-box; font-size: 1rem; background: #0b132b; color: #fff; }
     input:focus, select:focus, textarea:focus { border-color: #48cae4; outline: none; }
@@ -26,19 +27,14 @@
     <div class="banner">
       <strong>⚠️ UNCLASSIFIED/CUI SYSTEM:</strong> Do NOT submit Personally Identifiable Information (PII) like SSNs, protected health data (PHI), or classified information.
     </div>
-
+    <div class="token-badge" id="tokenDisplay">Verifying Base Installation Token...</div>
     <form id="dormForm">
       <label for="buildingNumber">Building Number *</label>
       <select id="buildingNumber" required>
-        <option value="">-- Select Building --</option>
-        <option value="1204">Bldg 1204</option>
-        <option value="1206">Bldg 1206</option>
-        <option value="1208">Bldg 1208</option>
+        <option value="">-- Loading Buildings --</option>
       </select>
-
       <label for="roomNumber">Room Number *</label>
-      <input type="text" id="roomNumber" pattern="^[1-4][0-9]{2}[A-Za-z]?$" placeholder="e.g., 204B" required>
-
+      <input type="text" id="roomNumber" pattern="^[1-4][0-9]{2}[A-Za-z]?$" placeholder="e.g., 204B or 100" required>
       <label for="category">Issue Category *</label>
       <select id="category" required>
         <option value="">-- Select Category --</option>
@@ -51,54 +47,74 @@
         <option value="Pest Control">Pest Control</option>
         <option value="Other">Other</option>
       </select>
-
       <label for="urgency">Urgency Level *</label>
       <select id="urgency" required>
         <option value="Routine">Routine (Standard Work Order)</option>
         <option value="Urgent">Urgent (Impacts Livability)</option>
         <option value="Emergency">Emergency (Flood / Mold / Outage)</option>
       </select>
-
       <label for="description">Description (Min 15 chars) *</label>
       <textarea id="description" rows="3" minlength="15" maxlength="500" placeholder="Provide details like 'Standing water under the sink' or 'AC blowing warm air.'" required></textarea>
-
-      <label for="photo">Photo Evidence (.jpg / .png only - Max 5MB) *</label>
+      <label for="photo">Photo Evidence (.jpg / .png only - Max 5MB)</label>
       <input type="file" id="photo" accept="image/jpeg, image/png" capture="environment">
       <div id="fileError" class="error">Invalid attachment. Make sure it's a JPG/PNG under 5MB.</div>
       <div class="file-preview" id="previewContainer">
         <img id="imagePreview" src="" alt="Thumbnail preview">
       </div>
-
       <label for="submitterEmail">Your Email *</label>
       <input type="email" id="submitterEmail" placeholder="personal or .mil email" required>
-
       <label style="display:flex; align-items:center; font-weight:normal; margin-top:16px; cursor:pointer;">
         <input type="checkbox" id="entryAuthorized" style="width:auto; margin-right:10px;" required>
         I authorize CE/ADL personnel to enter my room if I am absent.
       </label>
-
       <button type="submit" id="submitBtn">Submit Secure Request</button>
     </form>
   </div>
-
   <script>
-    // 1. URL Query Parameter Handling
-    const urlParams = new URLSearchParams(window.location.search);
-    const bldgParam = urlParams.get('bldg');
-    if (bldgParam) {
-      document.getElementById('buildingNumber').value = bldgParam;
-    }
+    const bldgSelect = document.getElementById('buildingNumber');
+    const tokenDisplay = document.getElementById('tokenDisplay');
+    const submitBtn = document.getElementById('submitBtn');
 
-    // 2. Adjust requirements and show preview
+    // 1. Read Opaque Base Token from QR URL (?btoken=wpafb-7f9a2)
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentBaseToken = urlParams.get('btoken') || "wpafb-7f9a2"; // Default fallback for testing
+
+    // 2. Dynamically fetch buildings.json and filter by ?btoken=
+    async function loadBuildings() {
+      try {
+        const response = await fetch('./buildings.json', { cache: 'no-store' });
+        const buildings = await response.json();
+        const filteredBuildings = buildings.filter(item => item.btoken === currentBaseToken);
+        if (filteredBuildings.length === 0) {
+          bldgSelect.innerHTML = '<option value="">-- Invalid or Unrecognized Base QR Token --</option>';
+          tokenDisplay.textContent = "❌ Unrecognized Base Token (" + currentBaseToken + ")";
+          tokenDisplay.style.color = "#ff4d4d";
+          submitBtn.disabled = true;
+          return;
+        }
+        tokenDisplay.textContent = "🔒 Verified Base Token: " + currentBaseToken;
+        bldgSelect.innerHTML = '<option value="">-- Select Building --</option>';
+        filteredBuildings.forEach(item => {
+          const opt = document.createElement('option');
+          opt.value = item.bldg;
+          opt.textContent = `Bldg ${item.bldg} (${item.squadron})`;
+          bldgSelect.appendChild(opt);
+        });
+      } catch (err) {
+        bldgSelect.innerHTML = '<option value="">-- Error Loading Buildings --</option>';
+        console.error("Failed to load dynamic building list:", err);
+      }
+    }
+    window.onload = loadBuildings;
+ 
+    // 3. Photo requirement & thumbnail preview
     const categoryEl = document.getElementById('category');
     const photoEl = document.getElementById('photo');
     const previewContainer = document.getElementById('previewContainer');
     const imagePreview = document.getElementById('imagePreview');
-
     categoryEl.addEventListener('change', () => {
       photoEl.required = (categoryEl.value === 'Mold / Moisture');
     });
-
     photoEl.addEventListener('change', function() {
       const file = this.files[0];
       if (file) {
@@ -106,14 +122,12 @@
         reader.onload = function(e) {
           imagePreview.src = e.target.result;
           previewContainer.style.display = 'block';
-        }
+        };
         reader.readAsDataURL(file);
       } else {
         previewContainer.style.display = 'none';
       }
     });
-
-    // Helper: Convert File to Base64
     const toBase64 = file => new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -121,8 +135,79 @@
       reader.onerror = error => reject(error);
     });
 
-    // Client-Side Input Sanitization (XSS and SQL neutralization)
+    //4. Complete <script>...<\/script> payload eraser + HTML tag stripper
     function sanitizeInput(rawInput) {
       if (!rawInput) return "";
-      let clean = rawInput.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML tags
-      const 
+      // Completely erase <script>...<\/script> and everything in between
+      let clean = rawInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+      // Strip any remaining HTML tags
+      clean = clean.replace(/<\/?[^>]+(>|$)/g, "");
+      return clean.trim();
+    }
+
+    // 5. Submit Handler
+    document.getElementById('dormForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fileError = document.getElementById('fileError');
+      fileError.style.display = 'none';
+      let attachmentObj = null;
+      const file = photoEl.files[0];
+      if (file) {
+        const validTypes = ['image/jpeg', 'image/png'];
+        if (!validTypes.includes(file.type) || file.size > 5 * 1024 * 1024) {
+          fileError.style.display = 'block';
+          return;
+        }
+        const b64 = await toBase64(file);
+        attachmentObj = {
+          fileName: file.name.replace(/[^a-zA-Z0-9._-]/g, '_'),
+          mimeType: file.type,
+          fileSizeBytes: file.size,
+          base64Content: b64
+        };
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Securing & Transmitting...';
+      const payload = {
+        buildingNumber: bldgSelect.value,
+        baseToken: currentBaseToken,
+        roomNumber: document.getElementById('roomNumber').value.toUpperCase(),
+        category: categoryEl.value,
+        urgency: document.getElementById('urgency').value,
+        description: sanitizeInput(document.getElementById('description').value),
+        submitterEmail: sanitizeInput(document.getElementById('submitterEmail').value),
+        entryAuthorized: document.getElementById('entryAuthorized').checked,
+        submissionTimestamp: new Date().toISOString(),
+        attachment: attachmentObj
+      };
+      const FLOW_ENDPOINT = "https://prod-xx.usgovtexas.logic.azure.us:443/workflows/YOUR_FLOW_ID/triggers/manual/paths/invoke...";
+      try {
+        const res = await fetch(FLOW_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-USAF-DormQoL-Token': 'DAF-QoL-2026-SecureBridge-Token-ABC123'
+          },
+          body: JSON.stringify(payload)
+       });
+        if (res.ok) {
+          document.querySelector('.container').innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+              <h2 style="color: #48cae4;">✔️ Submission Completed</h2>
+              <p>Your request for <strong>Bldg ${payload.buildingNumber}, Room ${payload.roomNumber}</strong> has been logged securely.</p>
+              <p style="font-size: 0.85rem; color: #cbd5e1;">If you have additional photo evidence, email it to <strong>michael.dickey.4@us.af.mil</strong> with subject: <strong>Bldg ${payload.buildingNumber} Rm ${payload.roomNumber}</strong></p>
+            </div>`;
+        } else {
+          alert('Transmission failed. Check connection or notify your ADL.');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Secure Request';
+        }
+      } catch (err) {
+        alert('Network block detected. Submit via standard cellular connection.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Secure Request';
+      }
+    });
+  </script>
+</body>
+</html>
